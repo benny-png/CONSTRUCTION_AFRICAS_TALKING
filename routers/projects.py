@@ -33,8 +33,45 @@ router = APIRouter()
     
     This endpoint is accessible only to users with the **manager** role.
     
-    The project includes details such as name, description, location, 
-    budget, start date, end date, and the client ID who owns the project.
+    ### Input Parameters
+    
+    **Required:**
+    - `name` (string): Name of the project.
+      Example: "Kindaruma Heights Apartment Building"
+    - `description` (string): Detailed description of the project.
+      Example: "Construction of a 15-floor luxury apartment building"
+    - `location` (string): Location where the project will be built.
+      Example: "Kindaruma Road, Nairobi"
+    - `budget` (number): Total project budget in currency units.
+      Example: 150000000
+    - `start_date` (string): Project start date in YYYY-MM-DD format.
+      Example: "2023-09-01"
+    - `end_date` (string): Expected project completion date in YYYY-MM-DD format.
+      Example: "2025-03-31"
+    - `client_id` (string): ID of the client who owns the project.
+      Example: "60d21b4667d0d8992e610c85"
+    
+    ### Response Format
+    
+    ```json
+    {
+      "id": "61a23c4567d0d8992e610d96",
+      "name": "Kindaruma Heights Apartment Building",
+      "description": "Construction of a 15-floor luxury apartment building",
+      "location": "Kindaruma Road, Nairobi",
+      "budget": 150000000,
+      "start_date": "2023-09-01",
+      "end_date": "2025-03-31",
+      "client_id": "60d21b4667d0d8992e610c85",
+      "status": "planning",
+      "created_at": "2023-08-15T14:25:30.123Z",
+      "progress_reports": []
+    }
+    ```
+    
+    ### Authorization
+    
+    Requires a valid JWT token with manager role.
     
     ### curl Example
     ```bash

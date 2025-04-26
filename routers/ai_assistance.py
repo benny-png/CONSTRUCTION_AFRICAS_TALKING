@@ -104,17 +104,19 @@ async def get_project_context(project_id: str) -> Dict[str, Any]:
     
     This endpoint is accessible only to users with the **manager** role.
     
-    Managers can describe their project needs, challenges or questions to get
-    AI-generated recommendations, best practices, and advice.
-    
     ### Input Parameters
     
-    | Parameter | Type | Required | Description | Example |
-    |-----------|------|----------|-------------|---------|
-    | `query` | string | **Required** | The manager's question or request for advice | "I need to plan a 15-floor apartment building project. What are the key milestones I should include?" |
-    | `project_type` | string | Optional | Type of project: residential, commercial, or infrastructure | "residential" |
-    | `budget_constraint` | string | Optional | Budget level: low, medium, or high | "high" |
-    | `project_id` | string | Optional | Project ID to get context-specific advice based on the current state of a specific project | "61a23c4567d0d8992e610d96" |
+    **Required:**
+    - `query` (string): The manager's question or request for advice.
+      Example: "I need to plan a 15-floor apartment building project. What are the key milestones I should include?"
+    
+    **Optional:**
+    - `project_type` (string): Type of project (residential, commercial, infrastructure).
+      Example: "residential"
+    - `budget_constraint` (string): Budget level (low, medium, high).
+      Example: "high"
+    - `project_id` (string): Project ID to get context-specific advice based on the current state of a specific project.
+      Example: "61a23c4567d0d8992e610d96"
     
     ### Response Format
     
@@ -263,16 +265,16 @@ async def get_manager_project_advice(
     
     This endpoint is accessible only to users with the **worker** role.
     
-    Workers can describe construction problems, ask about techniques, or request
-    help with specific tasks to get AI-generated guidance.
-    
     ### Input Parameters
     
-    | Parameter | Type | Required | Description | Example |
-    |-----------|------|----------|-------------|---------|
-    | `query` | string | **Required** | The worker's question or request for help | "How do I properly install electrical conduit in a concrete wall?" |
-    | `image` | file | Optional | Image of the construction issue or situation (JPG, PNG) | *A photo of the work area or problem* |
-    | `project_id` | string | Optional | Project ID to provide context for the AI response | "61a23c4567d0d8992e610d96" |
+    **Required:**
+    - `query` (string): The worker's question or request for help.
+      Example: "How do I properly install electrical conduit in a concrete wall?"
+    
+    **Optional:**
+    - `image` (file): Image of the construction issue or situation (JPG, PNG).
+    - `project_id` (string): Project ID to provide context for the AI response.
+      Example: "61a23c4567d0d8992e610d96"
     
     ### Response Format
     
@@ -406,15 +408,13 @@ async def get_worker_construction_help(
     
     This endpoint is accessible only to users with the **client** role.
     
-    Clients can ask questions about their project's progress, timelines, or budget
-    to get AI-generated explanations in non-technical terms.
-    
     ### Input Parameters
     
-    | Parameter | Type | Required | Description | Example |
-    |-----------|------|----------|-------------|---------|
-    | `project_id` | string | **Required** | ID of the client's project | "61a23c4567d0d8992e610d96" |
-    | `query` | string | **Required** | The client's question about project progress | "Is my project on schedule? What are the next major milestones?" |
+    **Required:**
+    - `project_id` (string): ID of the client's project.
+      Example: "61a23c4567d0d8992e610d96"
+    - `query` (string): The client's question about project progress.
+      Example: "Is my project on schedule? What are the next major milestones?"
     
     ### Response Format
     
@@ -538,19 +538,17 @@ async def get_client_progress_analysis(
     
     This endpoint is accessible to users with the **manager** or **client** role.
     
-    Verifies if the recorded expense amount matches what's shown on the receipt, helping
-    to maintain financial trust and transparency in the project accounting.
-    
-    The AI will analyze the receipt image to extract amount information and compare it
-    with the recorded expense data in the system.
-    
     ### Input Parameters
     
-    | Parameter | Type | Required | Description | Example |
-    |-----------|------|----------|-------------|---------|
-    | `expense_id` | string | **Required** | ID of the expense to verify | "61a23c4567d0d8992e610d96" |
-    | `verification_type` | string | Optional | Type of verification to perform (default: "financial_accuracy") | "financial_accuracy" |
-    | `notes` | string | Optional | Additional notes about the verification request | "This receipt appears blurry, please check if the amount matches $1,250.75" |
+    **Required:**
+    - `expense_id` (string): ID of the expense to verify.
+      Example: "61a23c4567d0d8992e610d96"
+    
+    **Optional:**
+    - `verification_type` (string): Type of verification to perform (default: "financial_accuracy").
+      Example: "financial_accuracy"
+    - `notes` (string): Additional notes about the verification request.
+      Example: "This receipt appears blurry, please check if the amount matches $1,250.75"
     
     ### Response Format
     

@@ -40,17 +40,32 @@ sudo docker rmi ${IMAGE_NAME}:new 2>/dev/null || true
 echo "🧹 Cleaning up unused images..."
 sudo docker image prune -f
 
+# Create temporary .env file with correct API key if it doesn't exist
+echo "📝 Ensuring .env file has the correct API key..."
+TEMP_ENV_FILE=$(mktemp)
+cat > ${TEMP_ENV_FILE} << EOF
+# OpenRouter API Key (for AI features)
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+SITE_URL="https://construction.contactmanagers.xyz"
+SITE_NAME="Construction Management System"
+EOF
+
 # Run new container
 echo "▶️ Starting new container on port ${HOST_PORT}..."
 sudo docker run -d \
     --name ${CONTAINER_NAME} \
     -p ${HOST_PORT}:${CONTAINER_PORT} \
     -v ${CONTAINER_NAME}_uploads:/app/uploads:rw \
+    -v $(pwd)/.env:/app/.env:ro \
+    --env-file .env \
     -e MONGODB_URI="${MONGODB_URI}" \
     -e JWT_SECRET_KEY="${JWT_SECRET_KEY}" \
     -e OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
     --restart unless-stopped \
     ${IMAGE_NAME}:latest
+
+# Remove temporary file
+rm ${TEMP_ENV_FILE}
 
 # Check if container is running
 if sudo docker ps | grep -q "${CONTAINER_NAME}"; then

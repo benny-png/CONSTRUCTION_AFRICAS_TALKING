@@ -11,13 +11,20 @@ from models.user import UserRole
 from routers.auth import get_current_user, check_user_role
 from logging_config import logger
 
-# Load environment variables
-load_dotenv()
+# Force reload environment variables
+load_dotenv(override=True)
 
 # OpenRouter configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "your-openrouter-api-key-here")
 SITE_URL = os.getenv("SITE_URL", "https://construction.contactmanagers.xyz")
 SITE_NAME = os.getenv("SITE_NAME", "Construction Management System")
+
+# Log API key status (masked for security)
+if OPENROUTER_API_KEY and OPENROUTER_API_KEY != "your-openrouter-api-key-here":
+    masked_key = OPENROUTER_API_KEY[:8] + "..." + OPENROUTER_API_KEY[-4:] if len(OPENROUTER_API_KEY) > 12 else "***masked***"
+    logger.info(f"OpenRouter API key loaded: {masked_key}")
+else:
+    logger.error("OpenRouter API key not found or invalid")
 
 # Initialize OpenAI client with OpenRouter
 ai_client = OpenAI(
@@ -84,6 +91,14 @@ async def get_manager_project_advice(
             prompt += f"Budget Level: {budget_constraint}\n"
         
         logger.debug(f"Sending AI request with prompt: {prompt[:100]}...")
+        
+        # Check if API key is available
+        if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+            logger.error("OpenRouter API key is not set or invalid")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI service not properly configured. Please contact the administrator."
+            )
         
         # Call AI model through OpenRouter
         completion = ai_client.chat.completions.create(

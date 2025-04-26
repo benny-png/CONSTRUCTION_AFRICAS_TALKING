@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from typing import Annotated, List
 from datetime import datetime
 
@@ -16,10 +16,49 @@ from routers.auth import get_current_user, check_user_role
 router = APIRouter()
 
 # Create inventory request (worker only)
-@router.post("", response_model=Request)
+@router.post(
+    "", 
+    response_model=Request,
+    summary="Create inventory request (Worker only)",
+    description="""
+    Create a new inventory request for materials or tools.
+    
+    This endpoint is accessible only to users with the **worker** role.
+    
+    Workers can only create requests for themselves.
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/requests' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "project_id": "61a23c4567d0d8992e610d96",
+        "worker_id": "60d21b4667d0d8992e610c87",
+        "item_name": "Cement bags",
+        "quantity": 10,
+        "urgency": "high",
+        "notes": "Needed for foundation work tomorrow"
+      }'
+    ```
+    """,
+    response_description="Returns the created request with an ID, status, and timestamp"
+)
 async def request_inventory_item(
-    request_data: RequestCreate,
-    current_user: Annotated[dict, Depends(check_user_role([UserRole.WORKER]))]
+    current_user: Annotated[dict, Depends(check_user_role([UserRole.WORKER]))],
+    request_data: RequestCreate = Body(
+        ...,
+        example={
+            "project_id": "61a23c4567d0d8992e610d96",
+            "worker_id": "60d21b4667d0d8992e610c87",
+            "item_name": "Cement bags",
+            "quantity": 10,
+            "urgency": "high",
+            "notes": "Needed for foundation work tomorrow"
+        }
+    )
 ):
     # Verify project exists
     project = await get_project(request_data.project_id)
@@ -58,7 +97,25 @@ async def request_inventory_item(
     }
 
 # Get requests for a project (manager only)
-@router.get("/{project_id}", response_model=List[Request])
+@router.get(
+    "/{project_id}", 
+    response_model=List[Request],
+    summary="Get project requests (Manager only)",
+    description="""
+    Get all inventory requests for a specific project.
+    
+    This endpoint is accessible only to users with the **manager** role.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/requests/61a23c4567d0d8992e610d96' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
+    """,
+    response_description="Returns a list of inventory requests for the specified project"
+)
 async def get_project_requests(
     project_id: str,
     current_user: Annotated[dict, Depends(check_user_role([UserRole.MANAGER]))]
@@ -76,7 +133,27 @@ async def get_project_requests(
     return requests
 
 # Get requests for a worker (worker only)
-@router.get("/worker/{worker_id}", response_model=List[Request])
+@router.get(
+    "/worker/{worker_id}", 
+    response_model=List[Request],
+    summary="Get worker requests (Worker only)",
+    description="""
+    Get all inventory requests made by a specific worker.
+    
+    This endpoint is accessible only to users with the **worker** role.
+    
+    Workers can only view their own requests.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/requests/worker/60d21b4667d0d8992e610c87' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
+    """,
+    response_description="Returns a list of inventory requests made by the specified worker"
+)
 async def get_worker_requests(
     worker_id: str,
     current_user: Annotated[dict, Depends(check_user_role([UserRole.WORKER]))]

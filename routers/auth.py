@@ -65,37 +65,85 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     logger.debug(f"Decoding token: {token[:10]}...")
     
     try:
+        # Decode the JWT token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None:
+            logger.warning("Username missing from token")
             raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    logger.debug(f"Getting user by username: {username}")
-    user = await get_user_by_username(username)
-    
-    if user is None:
-        logger.warning(f"User not found: {username}")
-        raise credentials_exception
+            
+        # Get user from database
+        logger.debug(f"Getting user by username: {username}")
+        user = await get_user_by_username(username)
         
-    logger.debug(f"User found: {username}")
-    return user
+        if user is None:
+            logger.warning(f"User not found: {username}")
+            raise credentials_exception
+            
+        # Combine user data with token payload for consistent access
+        # This ensures both the check_user_role and other functions can access the same data
+        user_data = {
+            **user,
+            "token_payload": payload  # Include the original token payload
+        }
+            
+        logger.debug(f"User found: {username}")
+        return user_data
+    except JWTError as e:
+        logger.error(f"JWT error: {str(e)}")
+        raise credentials_exception
+    except Exception as e:
+        logger.error(f"Error getting current user: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating credentials: {str(e)}"
+        )
 
 # Helper to check role
 def check_user_role(allowed_roles: List[UserRole]):
     async def _check_user_role(token: Annotated[str, Depends(oauth2_scheme)]):
-        logger.debug(f"Checking user role. User role: {token['role']}, Required roles: {[role.value for role in allowed_roles]}")
-        
-        if UserRole(token["role"]) not in allowed_roles:
-            logger.warning(f"Insufficient permissions. User role: {token['role']}, Required roles: {[role.value for role in allowed_roles]}")
+        try:
+            # Decode the token first
+            logger.debug(f"Decoding token for role check: {token[:10]}...")
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            
+            # Extract user role from payload
+            role = payload.get("role")
+            if not role:
+                logger.warning("No role found in token")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication token: missing role",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            
+            logger.debug(f"Checking user role. User role: {role}, Required roles: {[role.value for role in allowed_roles]}")
+            
+            # Check if user has required role
+            if UserRole(role) not in allowed_roles:
+                logger.warning(f"Insufficient permissions. User role: {role}, Required roles: {[role.value for role in allowed_roles]}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Insufficient permissions. Required roles: {[role.value for role in allowed_roles]}"
+                )
+            
+            logger.debug("Role check passed")
+            return payload  # Return the full decoded payload
+        except JWTError as e:
+            logger.error(f"JWT error during role check: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required roles: {[role.value for role in allowed_roles]}"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
             )
-        
-        logger.debug("Role check passed")
-        return token
+        except Exception as e:
+            logger.error(f"Error checking user role: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error validating credentials: {str(e)}"
+            )
     return _check_user_role
 
 # Register a new user
@@ -112,6 +160,20 @@ def check_user_role(allowed_roles: List[UserRole]):
     - **manager**: Full access to project management, inventory, expenses, and receipts
     - **worker**: Can only request inventory
     - **client**: Can only view project progress, expenses, and receipts
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/auth/register' \\
+      -H 'accept: application/json' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "username": "john_doe",
+        "password": "password123",
+        "email": "john.doe@example.com",
+        "role": "manager"
+      }'
+    ```
     """,
     response_description="Returns the newly created user with an ID and creation timestamp"
 )
@@ -190,6 +252,15 @@ async def register_user(
     included in the Authorization header as a Bearer token.
     
     **Example header**: `Authorization: Bearer <token>`
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/auth/login' \\
+      -H 'accept: application/json' \\
+      -H 'Content-Type: application/x-www-form-urlencoded' \\
+      -d 'username=john_doe&password=password123'
+    ```
     """,
     response_description="Returns an access token and token type"
 )
@@ -245,6 +316,14 @@ async def login_for_access_token(
     Get information about the currently authenticated user.
     
     This endpoint requires authentication with a valid token.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/auth/me' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="Returns the authenticated user's information"
 )
@@ -267,6 +346,21 @@ async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]
     It allows managers to create new manager or worker accounts.
     
     Required fields include username, password, name, email, phone_number, and role.
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/auth/create-staff' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "username": "site_manager",
+        "password": "StaffPassword123",
+        "email": "jane.smith@construction.com",
+        "role": "manager"
+      }'
+    ```
     """,
     response_description="Returns the registered staff information without the password"
 )

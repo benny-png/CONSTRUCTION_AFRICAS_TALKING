@@ -19,6 +19,8 @@ class ProgressReport(BaseModel):
 class ProjectBase(BaseModel):
     name: str
     description: str
+    location: str
+    budget: float
     start_date: date_type
     end_date: date_type
     client_id: str

@@ -3,7 +3,7 @@ from typing import Annotated, List, Optional
 import traceback
 
 from models.user import User, UserRole, UserUpdate
-from database.operations import get_users, get_user_by_id as get_user, update_user, delete_user
+from database.operations import get_users, get_user_by_id as get_user, update_user, delete_user, get_users_by_role
 from routers.auth import get_current_user, check_user_role
 from logging_config import logger
 
@@ -19,6 +19,12 @@ router = APIRouter()
     
     This endpoint is accessible only to users with the **manager** role.
     Returns a list of all registered users without their passwords.
+    
+    ### curl example:
+    ```
+    curl -X GET "https://construction.contactmanagers.xyz/users" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
     """,
     response_description="Returns a list of all users"
 )
@@ -59,6 +65,12 @@ async def read_users(
     Returns the user information without their password.
     
     If the user with the specified ID does not exist, a 404 error is returned.
+    
+    ### curl example:
+    ```
+    curl -X GET "https://construction.contactmanagers.xyz/users/USER_ID" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
     """,
     response_description="Returns the specified user information"
 )
@@ -109,6 +121,20 @@ async def read_user(
     
     Fields that are not provided will remain unchanged.
     Returns the updated user information without their password.
+    
+    ### curl example:
+    ```
+    curl -X PUT "https://construction.contactmanagers.xyz/users/USER_ID" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \\
+      -H "Content-Type: application/json" \\
+      -d '{
+        "name": "Updated Name",
+        "email": "updated.email@example.com",
+        "phone_number": "+254712345678",
+        "role": "worker",
+        "password": "NewSecurePassword456"
+      }'
+    ```
     """,
     response_description="Returns the updated user information"
 )
@@ -188,6 +214,12 @@ async def update_user_by_id(
     
     If the user with the specified ID does not exist, a 404 error is returned.
     No content is returned upon successful deletion.
+    
+    ### curl example:
+    ```
+    curl -X DELETE "https://construction.contactmanagers.xyz/users/USER_ID" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
     """,
     response_description="No content is returned on successful deletion"
 )
@@ -238,4 +270,125 @@ async def delete_user_by_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting user: {str(e)}"
+        )
+
+# Get all clients (accessible to all authenticated users)
+@router.get(
+    "/clients", 
+    response_model=List[User],
+    summary="Get all clients",
+    description="""
+    Retrieve a list of all clients in the system.
+    
+    This endpoint is accessible to any authenticated user.
+    This is particularly useful when creating projects and you need to assign a client.
+    
+    ### curl example:
+    ```
+    curl -X GET "https://construction.contactmanagers.xyz/users/clients" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+    """,
+    response_description="Returns a list of all client users"
+)
+async def read_clients(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    request: Request = None
+):
+    """
+    Get all client users.
+    """
+    try:
+        username = current_user.get('username', 'unknown')
+        logger.info(f"Getting all clients by user: {username}")
+        clients = await get_users_by_role(UserRole.CLIENT.value)
+        
+        logger.info(f"Retrieved {len(clients)} clients")
+        return clients
+    except Exception as e:
+        logger.error(f"Error retrieving clients: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving clients: {str(e)}"
+        )
+
+# Get all managers (accessible to all authenticated users)
+@router.get(
+    "/managers", 
+    response_model=List[User],
+    summary="Get all managers",
+    description="""
+    Retrieve a list of all managers in the system.
+    
+    This endpoint is accessible to any authenticated user.
+    
+    ### curl example:
+    ```
+    curl -X GET "https://construction.contactmanagers.xyz/users/managers" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+    """,
+    response_description="Returns a list of all manager users"
+)
+async def read_managers(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    request: Request = None
+):
+    """
+    Get all manager users.
+    """
+    try:
+        username = current_user.get('username', 'unknown')
+        logger.info(f"Getting all managers by user: {username}")
+        managers = await get_users_by_role(UserRole.MANAGER.value)
+        
+        logger.info(f"Retrieved {len(managers)} managers")
+        return managers
+    except Exception as e:
+        logger.error(f"Error retrieving managers: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving managers: {str(e)}"
+        )
+
+# Get all workers (accessible to all authenticated users)
+@router.get(
+    "/workers", 
+    response_model=List[User],
+    summary="Get all workers",
+    description="""
+    Retrieve a list of all workers in the system.
+    
+    This endpoint is accessible to any authenticated user.
+    
+    ### curl example:
+    ```
+    curl -X GET "https://construction.contactmanagers.xyz/users/workers" \\
+      -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+    ```
+    """,
+    response_description="Returns a list of all worker users"
+)
+async def read_workers(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    request: Request = None
+):
+    """
+    Get all worker users.
+    """
+    try:
+        username = current_user.get('username', 'unknown')
+        logger.info(f"Getting all workers by user: {username}")
+        workers = await get_users_by_role(UserRole.WORKER.value)
+        
+        logger.info(f"Retrieved {len(workers)} workers")
+        return workers
+    except Exception as e:
+        logger.error(f"Error retrieving workers: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving workers: {str(e)}"
         ) 

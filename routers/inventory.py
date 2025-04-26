@@ -28,6 +28,21 @@ router = APIRouter()
     the project it belongs to.
     
     Optionally, an image of the item can be uploaded for better visualization.
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/inventory' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -F 'name=Portland Cement' \\
+      -F 'quantity=500' \\
+      -F 'unit=bags' \\
+      -F 'project_id=60d21b4667d0d8992e610c85' \\
+      -F 'description=50kg bags of Portland cement' \\
+      -F 'cost_per_unit=750' \\
+      -F 'item_image=@/path/to/cement_image.jpg'
+    ```
     """,
     response_description="Returns the newly created inventory item with an ID and creation timestamp"
 )
@@ -135,6 +150,14 @@ async def add_item_to_inventory(
     
     The response includes a list of all materials and assets currently
     in the inventory for the specified project, including their images if available.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/inventory/60d21b4667d0d8992e610c85' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="Returns a list of inventory items for the specified project"
 )
@@ -185,6 +208,15 @@ async def get_inventory_items(
     This endpoint is accessible only to users with the **manager** role.
     
     The response is the actual image file that can be displayed in the UI.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/inventory/image/e672f890-b4f2-4dc6-f054-1234567890ab.jpg' \\
+      -H 'accept: image/*' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      --output cement_image.jpg
+    ```
     """,
     response_description="Returns the inventory item image file"
 )

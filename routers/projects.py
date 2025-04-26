@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
 from typing import Annotated, List, Optional
 import traceback
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 from models.project import ProjectCreate, Project, ProgressReportCreate, ProjectSummary, ProjectStatus, ProjectUpdate
 from models.user import UserRole
@@ -35,6 +35,24 @@ router = APIRouter()
     
     The project includes details such as name, description, location, 
     budget, start date, end date, and the client ID who owns the project.
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/projects' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "name": "Kindaruma Heights Apartment Building",
+        "description": "Construction of a 15-floor luxury apartment building",
+        "location": "Kindaruma Road, Nairobi",
+        "budget": 150000000,
+        "start_date": "2023-09-01",
+        "end_date": "2025-03-31",
+        "client_id": "60d21b4667d0d8992e610c85"
+      }'
+    ```
     """,
     response_description="Returns the newly created project with an ID and creation timestamp"
 )
@@ -51,7 +69,7 @@ async def create_project(
             "client_id": "60d21b4667d0d8992e610c85"
         }
     ),
-    current_user: dict = Depends(check_user_role([UserRole.MANAGER])),
+    token_data: dict = Depends(check_user_role([UserRole.MANAGER])),
     request: Request = None
 ):
     """
@@ -60,10 +78,15 @@ async def create_project(
     Requires manager role.
     """
     try:
-        logger.info(f"Creating new project: {project.name}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        logger.info(f"Creating new project: {project.name} by user {username} (ID: {user_id})")
         
         # Verify client exists
         client = await get_user(project.client_id)
+        logger.debug(f"Client data type: {type(client)}, value: {client}")
+        
         if not client:
             logger.warning(f"Client not found: {project.client_id}")
             raise HTTPException(
@@ -71,17 +94,34 @@ async def create_project(
                 detail="Client not found"
             )
         
+        # Check if client data is valid
+        if not isinstance(client, dict):
+            logger.error(f"Invalid client data format: {client}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid client data format"
+            )
+        
+        # Check if role field exists
+        if "role" not in client:
+            logger.error(f"Missing role field in client data: {client}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid client data: missing role field"
+            )
+        
         # Check if client is actually a client
         if client["role"] != UserRole.CLIENT.value:
-            logger.warning(f"User {project.client_id} is not a client")
+            logger.warning(f"User {project.client_id} is not a client, role is {client['role']}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User is not a client"
+                detail=f"User is not a client. User has role: {client['role']}"
             )
         
         # Create project
         project_data = project.dict()
-        project_data["status"] = ProjectStatus.PLANNING
+        project_data["status"] = ProjectStatus.PLANNING.value  # Use the string value
+        project_data["created_by"] = user_id  # Add creator information
         
         logger.debug(f"Project data: {project_data}")
         
@@ -120,6 +160,14 @@ async def create_project(
     - **workers**: see only projects they are assigned to
     
     Results can be filtered by status and client ID.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/projects?status=in_progress&client_id=60d21b4667d0d8992e610c85' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="Returns a list of projects with their details"
 )
@@ -135,12 +183,17 @@ async def get_projects(
     Accessible to all roles.
     """
     try:
-        logger.info(f"Getting projects list for user {current_user['username']}, role: {current_user['role']}")
+        # Access user information from the combined user object
+        username = current_user.get("username", "unknown")
+        role = current_user.get("role", "unknown")
+        user_id = current_user.get("id", "unknown")
+        
+        logger.info(f"Getting projects list for user {username}, role: {role}")
         logger.debug(f"Filters - status: {status}, client_id: {client_id}")
         
         # If client, override client_id filter with their own ID
-        if current_user["role"] == UserRole.CLIENT.value:
-            client_id = current_user["id"]
+        if role == UserRole.CLIENT.value:
+            client_id = user_id
             logger.debug(f"Client user, filtering by their ID: {client_id}")
         
         # Get projects based on filters
@@ -171,6 +224,14 @@ async def get_projects(
     - **managers**: can access any project
     - **clients**: can only access their own projects
     - **workers**: can only access projects they are assigned to
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/projects/61a23c4567d0d8992e610d96' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="Returns the project details"
 )
@@ -185,7 +246,12 @@ async def get_project_by_id(
     Accessible to all roles with appropriate permissions.
     """
     try:
-        logger.info(f"Getting project {project_id} for user {current_user['username']}")
+        # Access user information from the combined user object
+        username = current_user.get("username", "unknown")
+        role = current_user.get("role", "unknown")
+        user_id = current_user.get("id", "unknown")
+        
+        logger.info(f"Getting project {project_id} for user {username}")
         
         # Get the project
         project = await get_project(project_id)
@@ -197,8 +263,8 @@ async def get_project_by_id(
             )
         
         # Check access permissions
-        if current_user["role"] == UserRole.CLIENT.value and project["client_id"] != current_user["id"]:
-            logger.warning(f"Access denied to project {project_id} for client {current_user['id']}")
+        if role == UserRole.CLIENT.value and project["client_id"] != user_id:
+            logger.warning(f"Access denied to project {project_id} for client {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this project"
@@ -229,6 +295,21 @@ async def get_project_by_id(
     This endpoint is accessible only to users with the **manager** role.
     
     Any field that is not provided will remain unchanged.
+    
+    ### curl Example
+    ```bash
+    curl -X 'PUT' \\
+      'https://construction.contactmanagers.xyz/projects/61a23c4567d0d8992e610d96' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "name": "Kindaruma Heights Phase 2",
+        "budget": 175000000,
+        "status": "in_progress",
+        "end_date": "2025-06-30"
+      }'
+    ```
     """,
     response_description="Returns the updated project with all fields"
 )
@@ -243,7 +324,7 @@ async def update_project_details(
             "end_date": "2025-06-30"
         }
     ),
-    current_user: dict = Depends(check_user_role([UserRole.MANAGER])),
+    token_data: dict = Depends(check_user_role([UserRole.MANAGER])),
     request: Request = None
 ):
     """
@@ -252,7 +333,10 @@ async def update_project_details(
     Requires manager role.
     """
     try:
-        logger.info(f"Updating project: {project_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        logger.info(f"Updating project: {project_id} by user {username} (ID: {user_id})")
         logger.debug(f"Update data: {project_update.dict(exclude_unset=True)}")
         
         # Verify project exists
@@ -284,6 +368,10 @@ async def update_project_details(
         
         # Update the project
         update_data = project_update.dict(exclude_unset=True)
+        # Record who made the update
+        update_data["updated_by"] = user_id
+        update_data["updated_at"] = datetime.utcnow()
+        
         logger.debug(f"Applying updates: {update_data}")
         
         updated_project = await update_project(project_id, update_data)
@@ -318,12 +406,20 @@ async def update_project_details(
     
     This operation is permanent and cannot be undone. All associated data
     (expenses, tasks, etc.) will also be deleted.
+    
+    ### curl Example
+    ```bash
+    curl -X 'DELETE' \\
+      'https://construction.contactmanagers.xyz/projects/61a23c4567d0d8992e610d96' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="No content is returned on successful deletion"
 )
 async def delete_project_by_id(
     project_id: str,
-    current_user: dict = Depends(check_user_role([UserRole.MANAGER])),
+    token_data: dict = Depends(check_user_role([UserRole.MANAGER])),
     request: Request = None
 ):
     """
@@ -332,7 +428,10 @@ async def delete_project_by_id(
     Requires manager role.
     """
     try:
-        logger.info(f"Deleting project: {project_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        logger.info(f"Deleting project: {project_id} by user {username} (ID: {user_id})")
         
         # Verify project exists
         project = await get_project(project_id)
@@ -352,7 +451,7 @@ async def delete_project_by_id(
                 detail="Failed to delete project"
             )
         
-        logger.info(f"Project {project_id} deleted successfully")
+        logger.info(f"Project {project_id} deleted successfully by {username}")
         return None
     except HTTPException:
         raise
@@ -382,7 +481,7 @@ async def delete_project_by_id(
 )
 async def get_projects_for_client(
     client_id: str,
-    current_user: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
+    token_data: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
     request: Request=None
 ):
     """
@@ -391,11 +490,16 @@ async def get_projects_for_client(
     Requires manager or client role.
     """
     try:
-        logger.info(f"Getting projects for client: {client_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        role = token_data.get("role", "unknown")
+        
+        logger.info(f"Getting projects for client: {client_id} by user {username} (role: {role})")
         
         # If client, check if they are requesting their own projects
-        if current_user["role"] == UserRole.CLIENT.value and client_id != current_user["id"]:
-            logger.warning(f"Access denied to projects for client {client_id} by client {current_user['id']}")
+        if role == UserRole.CLIENT.value and client_id != user_id:
+            logger.warning(f"Access denied to projects for client {client_id} by client {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to other client's projects"
@@ -426,6 +530,20 @@ async def get_projects_for_client(
     
     The progress report includes the current completion percentage and a 
     description of the work done.
+    
+    ### curl Example
+    ```bash
+    curl -X 'POST' \\
+      'https://construction.contactmanagers.xyz/projects/61a23c4567d0d8992e610d96/progress' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
+      -H 'Content-Type: application/json' \\
+      -d '{
+        "report_date": "2023-10-01",
+        "description": "Completed foundation work and started framing",
+        "percentage_complete": 25.5
+      }'
+    ```
     """,
     response_description="Returns a confirmation message"
 )
@@ -439,7 +557,7 @@ async def submit_progress_report(
             "percentage_complete": 25.5
         }
     ),
-    current_user: Annotated[dict, Depends(check_user_role([UserRole.MANAGER]))]=None,
+    token_data: Annotated[dict, Depends(check_user_role([UserRole.MANAGER]))]=None,
     request: Request=None
 ):
     """
@@ -448,7 +566,11 @@ async def submit_progress_report(
     Requires manager role.
     """
     try:
-        logger.info(f"Submitting progress report for project: {project_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        
+        logger.info(f"Submitting progress report for project: {project_id} by user {username}")
         logger.debug(f"Report data: {report_data.dict()}")
         
         # Verify project exists
@@ -460,9 +582,13 @@ async def submit_progress_report(
                 detail="Project not found"
             )
         
+        # Add submitter information to the report
+        report_dict = report_data.dict()
+        report_dict["submitted_by"] = user_id
+        
         # Add progress report
-        await add_progress_report(project_id, report_data.dict())
-        logger.info(f"Progress report submitted successfully for project: {project_id}")
+        await add_progress_report(project_id, report_dict)
+        logger.info(f"Progress report submitted successfully for project: {project_id} by {username}")
         
         return {"message": "Progress report submitted successfully"}
     except HTTPException:
@@ -493,7 +619,7 @@ async def submit_progress_report(
 )
 async def get_project_progress(
     project_id: str,
-    current_user: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
+    token_data: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
     request: Request=None
 ):
     """
@@ -502,7 +628,12 @@ async def get_project_progress(
     Requires manager or client role.
     """
     try:
-        logger.info(f"Getting progress reports for project: {project_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        role = token_data.get("role", "unknown")
+        
+        logger.info(f"Getting progress reports for project: {project_id} by user {username} (role: {role})")
         
         # Verify project exists
         project = await get_project(project_id)
@@ -514,8 +645,8 @@ async def get_project_progress(
             )
         
         # If client, check if they are the client for this project
-        if current_user["role"] == UserRole.CLIENT.value and project["client_id"] != current_user["id"]:
-            logger.warning(f"Access denied to project {project_id} for client {current_user['id']}")
+        if role == UserRole.CLIENT.value and project["client_id"] != user_id:
+            logger.warning(f"Access denied to project {project_id} for client {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this project"
@@ -556,12 +687,20 @@ async def get_project_progress(
     - Material usage counts
     
     Workers cannot access this endpoint.
+    
+    ### curl Example
+    ```bash
+    curl -X 'GET' \\
+      'https://construction.contactmanagers.xyz/projects/61a23c4567d0d8992e610d96/summary' \\
+      -H 'accept: application/json' \\
+      -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ```
     """,
     response_description="Returns a summary of project statistics"
 )
 async def get_project_stats(
     project_id: str,
-    current_user: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
+    token_data: Annotated[dict, Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT]))]=None,
     request: Request=None
 ):
     """
@@ -570,7 +709,12 @@ async def get_project_stats(
     Requires manager or client role.
     """
     try:
-        logger.info(f"Getting summary for project: {project_id}")
+        # Access token data for user identification
+        user_id = token_data.get("user_id", "unknown")
+        username = token_data.get("sub", "unknown")
+        role = token_data.get("role", "unknown")
+        
+        logger.info(f"Getting summary for project: {project_id} by user {username} (role: {role})")
         
         # Verify project exists
         project = await get_project(project_id)
@@ -582,8 +726,8 @@ async def get_project_stats(
             )
         
         # If client, check if they are the client for this project
-        if current_user["role"] == UserRole.CLIENT.value and project["client_id"] != current_user["id"]:
-            logger.warning(f"Access denied to project {project_id} for client {current_user['id']}")
+        if role == UserRole.CLIENT.value and project["client_id"] != user_id:
+            logger.warning(f"Access denied to project {project_id} for client {user_id}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to this project"

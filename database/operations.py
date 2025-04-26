@@ -15,10 +15,35 @@ from database.db import (
 
 # Helper to convert ObjectId to string
 def serialize_object_id(doc):
-    if doc.get("_id"):
-        doc["id"] = str(doc["_id"])
-        del doc["_id"]
-    return doc
+    """Convert MongoDB ObjectId to string and handle edge cases."""
+    from logging_config import logger
+    
+    if not doc:
+        logger.warning("Attempted to serialize None or empty document")
+        return {}
+        
+    result = dict(doc)  # Create a copy to avoid modifying the original
+    
+    try:
+        if "_id" in result:
+            result["id"] = str(result["_id"])
+            del result["_id"]
+        
+        # Handle nested ObjectIds
+        for key, value in result.items():
+            if isinstance(value, dict):
+                result[key] = serialize_object_id(value)
+            elif isinstance(value, list):
+                result[key] = [
+                    serialize_object_id(item) if isinstance(item, dict) else item 
+                    for item in value
+                ]
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in serialize_object_id: {str(e)}")
+        # Return the original if serialization fails
+        return doc
 
 # User operations
 async def create_user(user_data: Dict[str, Any]) -> str:
@@ -33,12 +58,31 @@ async def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     return None
 
 async def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
-    if not ObjectId.is_valid(user_id):
+    """Get a user by their ID with additional error handling."""
+    from logging_config import logger
+    
+    try:
+        if not user_id:
+            logger.warning("Empty user_id provided to get_user_by_id")
+            return None
+            
+        if not ObjectId.is_valid(user_id):
+            logger.warning(f"Invalid ObjectId format for user_id: {user_id}")
+            return None
+            
+        logger.debug(f"Searching for user with ID: {user_id}")
+        user = await users_collection.find_one({"_id": ObjectId(user_id)})
+        
+        if not user:
+            logger.debug(f"No user found with ID: {user_id}")
+            return None
+            
+        serialized_user = serialize_object_id(user)
+        logger.debug(f"User found, serialized data: {serialized_user}")
+        return serialized_user
+    except Exception as e:
+        logger.error(f"Error in get_user_by_id: {str(e)}")
         return None
-    user = await users_collection.find_one({"_id": ObjectId(user_id)})
-    if user:
-        return serialize_object_id(user)
-    return None
 
 async def get_users() -> List[Dict[str, Any]]:
     cursor = users_collection.find()
@@ -72,6 +116,27 @@ async def delete_user(user_id: str) -> bool:
 async def get_user(user_id: str) -> Optional[Dict[str, Any]]:
     """Alias for get_user_by_id for consistent naming."""
     return await get_user_by_id(user_id)
+
+async def get_users_by_role(role: str) -> List[Dict[str, Any]]:
+    """Get all users with a specific role."""
+    from logging_config import logger
+    
+    try:
+        logger.debug(f"Getting users with role: {role}")
+        cursor = users_collection.find({"role": role})
+        users = []
+        
+        async for user in cursor:
+            # Remove sensitive data
+            if "hashed_password" in user:
+                user.pop("hashed_password")
+            users.append(serialize_object_id(user))
+            
+        logger.debug(f"Found {len(users)} users with role: {role}")
+        return users
+    except Exception as e:
+        logger.error(f"Error getting users by role: {str(e)}")
+        return []
 
 # Project operations
 async def create_project(project_data: Dict[str, Any]) -> str:

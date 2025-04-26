@@ -107,8 +107,30 @@ async def get_project_context(project_id: str) -> Dict[str, Any]:
     Managers can describe their project needs, challenges or questions to get
     AI-generated recommendations, best practices, and advice.
     
-    You can optionally provide a project_id to get context-aware advice based on the
-    current state of a specific project.
+    ### Input Parameters
+    
+    | Parameter | Type | Required | Description | Example |
+    |-----------|------|----------|-------------|---------|
+    | `query` | string | **Required** | The manager's question or request for advice | "I need to plan a 15-floor apartment building project. What are the key milestones I should include?" |
+    | `project_type` | string | Optional | Type of project: residential, commercial, or infrastructure | "residential" |
+    | `budget_constraint` | string | Optional | Budget level: low, medium, or high | "high" |
+    | `project_id` | string | Optional | Project ID to get context-specific advice based on the current state of a specific project | "61a23c4567d0d8992e610d96" |
+    
+    ### Response Format
+    
+    ```json
+    {
+      "query": "I need to plan a 15-floor apartment building project. What are the key milestones I should include?",
+      "advice": "Here is your AI-generated advice...",
+      "timestamp": "2023-07-15T08:30:45.123Z",
+      "project_id": "61a23c4567d0d8992e610d96",
+      "context_used": true
+    }
+    ```
+    
+    ### Authorization
+    
+    Requires a valid JWT token with manager role.
     
     ### curl Example
     ```bash
@@ -125,7 +147,7 @@ async def get_project_context(project_id: str) -> Dict[str, Any]:
       }'
     ```
     """,
-    response_description="Returns AI-generated advice and recommendations"
+    response_description="Returns AI-generated advice and recommendations with details about the query context"
 )
 async def get_manager_project_advice(
     token_data: dict = Depends(check_user_role([UserRole.MANAGER])),
@@ -244,6 +266,34 @@ async def get_manager_project_advice(
     Workers can describe construction problems, ask about techniques, or request
     help with specific tasks to get AI-generated guidance.
     
+    ### Input Parameters
+    
+    | Parameter | Type | Required | Description | Example |
+    |-----------|------|----------|-------------|---------|
+    | `query` | string | **Required** | The worker's question or request for help | "How do I properly install electrical conduit in a concrete wall?" |
+    | `image` | file | Optional | Image of the construction issue or situation (JPG, PNG) | *A photo of the work area or problem* |
+    | `project_id` | string | Optional | Project ID to provide context for the AI response | "61a23c4567d0d8992e610d96" |
+    
+    ### Response Format
+    
+    ```json
+    {
+      "query": "How do I properly install electrical conduit in a concrete wall?",
+      "guidance": "Here is your AI-generated construction guidance...",
+      "timestamp": "2023-07-15T08:30:45.123Z",
+      "project_id": "61a23c4567d0d8992e610d96",
+      "image_provided": true
+    }
+    ```
+    
+    ### Authorization
+    
+    Requires a valid JWT token with worker role.
+    
+    ### Note on File Upload
+    
+    This endpoint accepts `multipart/form-data` because it allows for file upload. Make sure to use the correct content type in your request.
+    
     ### curl Example
     ```bash
     curl -X 'POST' \\
@@ -256,7 +306,7 @@ async def get_manager_project_advice(
       -F 'project_id=61a23c4567d0d8992e610d96'
     ```
     """,
-    response_description="Returns AI-generated construction guidance"
+    response_description="Returns AI-generated construction guidance with context information"
 )
 async def get_worker_construction_help(
     token_data: dict = Depends(check_user_role([UserRole.WORKER])),
@@ -359,6 +409,29 @@ async def get_worker_construction_help(
     Clients can ask questions about their project's progress, timelines, or budget
     to get AI-generated explanations in non-technical terms.
     
+    ### Input Parameters
+    
+    | Parameter | Type | Required | Description | Example |
+    |-----------|------|----------|-------------|---------|
+    | `project_id` | string | **Required** | ID of the client's project | "61a23c4567d0d8992e610d96" |
+    | `query` | string | **Required** | The client's question about project progress | "Is my project on schedule? What are the next major milestones?" |
+    
+    ### Response Format
+    
+    ```json
+    {
+      "project_id": "61a23c4567d0d8992e610d96",
+      "query": "Is my project on schedule? What are the next major milestones?",
+      "analysis": "Here is your AI-generated progress analysis...",
+      "timestamp": "2023-07-15T08:30:45.123Z",
+      "context_used": true
+    }
+    ```
+    
+    ### Authorization
+    
+    Requires a valid JWT token with client role.
+    
     ### curl Example
     ```bash
     curl -X 'POST' \\
@@ -372,7 +445,7 @@ async def get_worker_construction_help(
       }'
     ```
     """,
-    response_description="Returns AI-generated analysis of project progress"
+    response_description="Returns AI-generated analysis of project progress tailored for clients"
 )
 async def get_client_progress_analysis(
     token_data: dict = Depends(check_user_role([UserRole.CLIENT])),
@@ -471,6 +544,38 @@ async def get_client_progress_analysis(
     The AI will analyze the receipt image to extract amount information and compare it
     with the recorded expense data in the system.
     
+    ### Input Parameters
+    
+    | Parameter | Type | Required | Description | Example |
+    |-----------|------|----------|-------------|---------|
+    | `expense_id` | string | **Required** | ID of the expense to verify | "61a23c4567d0d8992e610d96" |
+    | `verification_type` | string | Optional | Type of verification to perform (default: "financial_accuracy") | "financial_accuracy" |
+    | `notes` | string | Optional | Additional notes about the verification request | "This receipt appears blurry, please check if the amount matches $1,250.75" |
+    
+    ### Response Format
+    
+    ```json
+    {
+      "expense_id": "61a23c4567d0d8992e610d96",
+      "recorded_amount": 1250.75,
+      "description": "Purchase of concrete and cement",
+      "date": "2023-07-15",
+      "verification_type": "financial_accuracy",
+      "analysis": "Here is your AI-generated financial verification analysis...",
+      "verification_result": "MATCH",
+      "timestamp": "2023-07-15T08:30:45.123Z"
+    }
+    ```
+    
+    The `verification_result` will be one of:
+    - `MATCH`: The receipt amount matches the recorded amount
+    - `DISCREPANCY`: There is a difference between the receipt amount and recorded amount
+    - `NEEDS_REVIEW`: The AI couldn't make a clear determination
+    
+    ### Authorization
+    
+    Requires a valid JWT token with manager or client role.
+    
     ### curl Example
     ```bash
     curl -X 'POST' \\
@@ -479,10 +584,11 @@ async def get_client_progress_analysis(
       -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
       -H 'Content-Type: multipart/form-data' \\
       -F 'expense_id=61a23c4567d0d8992e610d96' \\
-      -F 'verification_type=financial_accuracy'
+      -F 'verification_type=financial_accuracy' \\
+      -F 'notes=Please check if this receipt matches our records'
     ```
     """,
-    response_description="Returns AI-generated financial accuracy analysis"
+    response_description="Returns AI-generated financial accuracy analysis with verification results"
 )
 async def verify_expense_financial_accuracy(
     token_data: dict = Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT])),

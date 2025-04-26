@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from logging_config import logger, log_request_info, log_response_info
 
 # Import routers
-from routers import auth, projects, inventory, requests, expenses, material_usage, notifications, ai_assistance
+from routers import auth, projects, inventory, requests, expenses, material_usage, notifications, ai_assistance, users
 from database.db import init_db
 
 # Create FastAPI app
@@ -92,6 +92,10 @@ app = FastAPI(
             "description": "AI-powered assistance for managers, workers, and clients"
         },
         {
+            "name": "Users",
+            "description": "Operations related to user management, retrieval, and filtering by roles"
+        },
+        {
             "name": "Root",
             "description": "Root endpoint for the API"
         }
@@ -140,6 +144,7 @@ app.include_router(expenses.router, prefix="/expenses", tags=["Expenses"])
 app.include_router(material_usage.router, prefix="/material-usage", tags=["Material Usage"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
 app.include_router(ai_assistance.router, prefix="/ai", tags=["AI Assistance"])
+app.include_router(users.router, prefix="/users", tags=["Users"])
 
 # Root endpoint
 @app.get("/", tags=["Root"])

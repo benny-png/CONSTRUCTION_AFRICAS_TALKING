@@ -160,6 +160,15 @@ async def create_project(
         project_data["status"] = ProjectStatus.PLANNING.value  # Use the string value
         project_data["created_by"] = user_id  # Add creator information
         
+        # Convert date objects to datetime objects for MongoDB compatibility
+        if isinstance(project_data["start_date"], date):
+            start_date = project_data["start_date"]
+            project_data["start_date"] = datetime.combine(start_date, datetime.min.time())
+            
+        if isinstance(project_data["end_date"], date):
+            end_date = project_data["end_date"]
+            project_data["end_date"] = datetime.combine(end_date, datetime.min.time())
+        
         logger.debug(f"Project data: {project_data}")
         
         project_id = await add_project(project_data)
@@ -405,6 +414,16 @@ async def update_project_details(
         
         # Update the project
         update_data = project_update.dict(exclude_unset=True)
+        
+        # Convert date objects to datetime objects for MongoDB compatibility
+        if "start_date" in update_data and isinstance(update_data["start_date"], date):
+            start_date = update_data["start_date"]
+            update_data["start_date"] = datetime.combine(start_date, datetime.min.time())
+            
+        if "end_date" in update_data and isinstance(update_data["end_date"], date):
+            end_date = update_data["end_date"]
+            update_data["end_date"] = datetime.combine(end_date, datetime.min.time())
+            
         # Record who made the update
         update_data["updated_by"] = user_id
         update_data["updated_at"] = datetime.utcnow()
@@ -622,6 +641,11 @@ async def submit_progress_report(
         # Add submitter information to the report
         report_dict = report_data.dict()
         report_dict["submitted_by"] = user_id
+        
+        # Convert date objects to datetime objects for MongoDB compatibility
+        if "report_date" in report_dict and isinstance(report_dict["report_date"], date):
+            report_date = report_dict["report_date"]
+            report_dict["report_date"] = datetime.combine(report_date, datetime.min.time())
         
         # Add progress report
         await add_progress_report(project_id, report_dict)

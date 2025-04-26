@@ -243,17 +243,15 @@ construction_management/
 
 - **Endpoint**: `POST /inventory`
 - **Description**: Add new inventory item (Manager only)
-- **Example Request**:
-  ```json
-  {
-    "name": "Portland Cement",
-    "description": "50kg bags of Portland cement",
-    "quantity": 500,
-    "unit": "bags",
-    "cost_per_unit": 750,
-    "project_id": "61a23c4567d0d8992e610d96"
-  }
-  ```
+- **Request Format**: `multipart/form-data`
+- **Form Fields**:
+  - `name`: "Portland Cement"
+  - `quantity`: 500
+  - `unit`: "bags"
+  - `project_id`: "61a23c4567d0d8992e610d96"
+  - `description`: "50kg bags of Portland cement" (optional)
+  - `cost_per_unit`: 750 (optional)
+  - `item_image`: [File Upload] (optional)
 - **Example Response**:
   ```json
   {
@@ -264,6 +262,7 @@ construction_management/
     "unit": "bags",
     "cost_per_unit": 750,
     "project_id": "61a23c4567d0d8992e610d96",
+    "image_url": "/inventory-images/e672f890-b4f2-4dc6-f054-1234567890ab.jpg",
     "created_at": "2023-08-16T09:45:20.123Z"
   }
   ```
@@ -283,6 +282,7 @@ construction_management/
       "unit": "bags",
       "cost_per_unit": 750,
       "project_id": "61a23c4567d0d8992e610d96",
+      "image_url": "/inventory-images/e672f890-b4f2-4dc6-f054-1234567890ab.jpg",
       "created_at": "2023-08-16T09:45:20.123Z"
     },
     {
@@ -293,10 +293,17 @@ construction_management/
       "unit": "pieces",
       "cost_per_unit": 1200,
       "project_id": "61a23c4567d0d8992e610d96",
+      "image_url": null,
       "created_at": "2023-08-16T10:15:40.123Z"
     }
   ]
   ```
+
+#### Get Inventory Item Image
+
+- **Endpoint**: `GET /inventory/image/{image_filename}`
+- **Description**: Get the image file for an inventory item (Manager only)
+- **Response**: The actual image file
 
 ### Inventory Requests
 

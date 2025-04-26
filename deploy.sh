@@ -14,9 +14,9 @@ JWT_SECRET_KEY=${JWT_SECRET_KEY:-"a9ddbcaba8c0ac1a0a812dc0c2f08514f5593b02f0a1a9
 
 # Check if uploads volume exists (for receipts)
 if sudo docker volume ls | grep -q "${CONTAINER_NAME}_uploads"; then
-    echo "📦 Found existing ${CONTAINER_NAME}_uploads volume - preserving receipt data"
+    echo "📦 Found existing ${CONTAINER_NAME}_uploads volume - preserving uploaded files"
 else
-    echo "📦 Creating ${CONTAINER_NAME}_uploads volume for receipts"
+    echo "📦 Creating ${CONTAINER_NAME}_uploads volume for uploaded files"
     sudo docker volume create ${CONTAINER_NAME}_uploads
 fi
 

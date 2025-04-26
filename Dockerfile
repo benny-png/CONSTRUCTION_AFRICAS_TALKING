@@ -14,8 +14,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Create directory for uploaded receipts
-RUN mkdir -p uploads/receipts
+# Create directories for uploaded files
+RUN mkdir -p uploads/receipts && \
+    mkdir -p uploads/inventory
 
 # Copy application code
 COPY . .

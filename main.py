@@ -123,6 +123,10 @@ app.add_middleware(
 os.makedirs("uploads/receipts", exist_ok=True)
 app.mount("/receipts", StaticFiles(directory="uploads/receipts"), name="receipts")
 
+# Mount static files for inventory images
+os.makedirs("uploads/inventory", exist_ok=True)
+app.mount("/inventory-images", StaticFiles(directory="uploads/inventory"), name="inventory_images")
+
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(projects.router, prefix="/projects", tags=["Projects"])

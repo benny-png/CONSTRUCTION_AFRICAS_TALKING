@@ -11,12 +11,13 @@ HOST_PORT=8002
 CONTAINER_PORT=8000
 MONGODB_URI=${MONGODB_URI:-"mongodb://localhost:27017/construction_db"}
 JWT_SECRET_KEY=${JWT_SECRET_KEY:-"a9ddbcaba8c0ac1a0a812dc0c2f08514f5593b02f0a1a9fdd4da1e28d6391cb7"}
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-"your-openrouter-api-key"}
 
 # Check if uploads volume exists (for receipts)
 if sudo docker volume ls | grep -q "${CONTAINER_NAME}_uploads"; then
-    echo "📦 Found existing ${CONTAINER_NAME}_uploads volume - preserving uploaded files"
+    echo "📦 Found existing ${CONTAINER_NAME}_uploads volume - preserving receipt data"
 else
-    echo "📦 Creating ${CONTAINER_NAME}_uploads volume for uploaded files"
+    echo "📦 Creating ${CONTAINER_NAME}_uploads volume for receipts"
     sudo docker volume create ${CONTAINER_NAME}_uploads
 fi
 
@@ -47,6 +48,7 @@ sudo docker run -d \
     -v ${CONTAINER_NAME}_uploads:/app/uploads:rw \
     -e MONGODB_URI="${MONGODB_URI}" \
     -e JWT_SECRET_KEY="${JWT_SECRET_KEY}" \
+    -e OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
     --restart unless-stopped \
     ${IMAGE_NAME}:latest
 

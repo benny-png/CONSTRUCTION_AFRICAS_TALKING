@@ -456,17 +456,20 @@ async def get_client_progress_analysis(
             detail=f"Error getting AI analysis: {str(e)}"
         )
 
-# New endpoint for transaction authenticity verification
+# New endpoint for financial accuracy verification
 @router.post(
     "/verify-transaction", 
-    summary="Verify transaction authenticity using AI (Manager/Client)",
+    summary="Verify expense financial accuracy using AI (Manager/Client)",
     description="""
-    Get AI-powered verification and analysis of expense receipts.
+    Get AI-powered verification of expense financial accuracy.
     
     This endpoint is accessible to users with the **manager** or **client** role.
     
-    Verify the authenticity of expenses by providing an expense ID and optionally 
-    uploading receipts for the AI to analyze and compare with the stored receipt.
+    Verifies if the recorded expense amount matches what's shown on the receipt, helping
+    to maintain financial trust and transparency in the project accounting.
+    
+    The AI will analyze the receipt image to extract amount information and compare it
+    with the recorded expense data in the system.
     
     ### curl Example
     ```bash
@@ -476,21 +479,20 @@ async def get_client_progress_analysis(
       -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \\
       -H 'Content-Type: multipart/form-data' \\
       -F 'expense_id=61a23c4567d0d8992e610d96' \\
-      -F 'query=Verify if this expense receipt is authentic and matches the claimed amount' \\
-      -F 'receipt_image=@receipt.jpg'
+      -F 'verification_type=financial_accuracy'
     ```
     """,
-    response_description="Returns AI-generated verification analysis"
+    response_description="Returns AI-generated financial accuracy analysis"
 )
-async def verify_transaction_authenticity(
+async def verify_expense_financial_accuracy(
     token_data: dict = Depends(check_user_role([UserRole.MANAGER, UserRole.CLIENT])),
     expense_id: str = Form(..., description="ID of the expense to verify"),
-    query: str = Form(..., description="Specific verification questions or concerns"),
-    receipt_image: Optional[UploadFile] = File(None, description="Optional receipt image to compare with stored receipt"),
+    verification_type: str = Form("financial_accuracy", description="Type of verification to perform"),
+    notes: Optional[str] = Form(None, description="Additional notes about the verification request"),
     request: Request = None
 ):
     """
-    Verify expense authenticity using AI.
+    Verify expense financial accuracy using AI.
     
     Requires manager or client role.
     """
@@ -499,7 +501,7 @@ async def verify_transaction_authenticity(
         user_id = token_data.get("user_id", "unknown")
         username = token_data.get("sub", "unknown")
         user_role = token_data.get("role", "unknown")
-        logger.info(f"{user_role.capitalize()} {username} requesting transaction verification for expense {expense_id}")
+        logger.info(f"{user_role.capitalize()} {username} requesting expense financial accuracy verification for expense {expense_id}")
         
         # Get expense details
         expense = await get_expense(expense_id)
@@ -509,20 +511,38 @@ async def verify_transaction_authenticity(
                 detail=f"Expense with ID {expense_id} not found"
             )
         
-        # Process uploaded receipt image if provided
+        # Check if API key is available
+        if not OPENROUTER_API_KEY or OPENROUTER_API_KEY == "your-openrouter-api-key-here":
+            logger.error("OpenRouter API key is not set or invalid")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI service not properly configured. Please contact the administrator."
+            )
+        
+        # Prepare for AI request
         messages = []
         content = []
         
-        # Build the query text
-        query_text = f"""You are an expert financial auditor specializing in construction expenses. Analyze the following expense and verify its authenticity:
+        # Build the instruction text
+        instruction_text = f"""You are an expert financial auditor specializing in construction expenses and receipt analysis. 
+        
+TASK: Analyze the receipt image and verify if the amount on the receipt matches the recorded expense amount in our system.
 
-Expense ID: {expense_id}
-Amount: ${expense.get('amount', 0):,.2f}
-Description: {expense.get('description', '')}
-Date: {expense.get('date', '')}
-Current verification status: {expense.get('verified', 'pending')}
+RECORDED EXPENSE DETAILS:
+- Expense ID: {expense_id}
+- Recorded Amount: ${expense.get('amount', 0):,.2f}
+- Description: {expense.get('description', '')}
+- Date: {expense.get('date', '')}
 
-User query: {query}
+YOUR OBJECTIVE:
+1. Carefully examine the receipt image
+2. Extract the total amount from the receipt
+3. Determine if the total amount on the receipt matches the recorded amount in our system
+4. Note any discrepancies in amounts, dates, or other relevant financial details
+5. Assess if there are any red flags or suspicious elements in the receipt
+6. Provide a final determination if the expense record is accurate and matches the receipt
+
+This verification is crucial for maintaining financial trust and transparency with our clients.
 """
         
         # Add project context if available
@@ -530,57 +550,49 @@ User query: {query}
         if project_id:
             project = await get_project(project_id)
             if project:
-                query_text += f"\nRelated to project: {project.get('name', 'Unknown')}"
+                instruction_text += f"\nPROJECT CONTEXT: This expense is for project '{project.get('name', 'Unknown')}'"
+        
+        # Add any notes if provided
+        if notes:
+            instruction_text += f"\n\nADDITIONAL NOTES: {notes}"
         
         content.append({
             "type": "text",
-            "text": query_text
+            "text": instruction_text
         })
         
-        # Get stored receipt URL
+        # Get stored receipt URL - this is the receipt we need to analyze
         receipt_url = expense.get('receipt_url')
-        if receipt_url:
-            # Check if the file exists (handle both relative and absolute paths)
-            receipt_path = receipt_url
-            if not os.path.exists(receipt_path) and not receipt_path.startswith("/"):
-                receipt_path = os.path.join("uploads/receipts", os.path.basename(receipt_url))
-            
-            if os.path.exists(receipt_path):
-                # Convert stored receipt to base64
-                with open(receipt_path, "rb") as img_file:
-                    base64_stored = base64.b64encode(img_file.read()).decode('utf-8')
-                    
-                # Add stored receipt to content
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_stored}"
-                    }
-                })
-                content.append({
-                    "type": "text",
-                    "text": "Above is the stored receipt from the database."
-                })
-                
-                logger.debug("Stored receipt image added to AI request")
+        if not receipt_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This expense does not have an associated receipt to verify"
+            )
         
-        # Process uploaded receipt image if provided
-        if receipt_image:
-            base64_uploaded = await process_image_file(receipt_image)
-                
-            # Add image to content
-            content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_uploaded}"
-                }
-            })
-            content.append({
-                "type": "text",
-                "text": "Above is the receipt image uploaded by the user for verification."
-            })
+        # Process the stored receipt
+        receipt_path = receipt_url
+        if not os.path.exists(receipt_path) and not receipt_path.startswith("/"):
+            receipt_path = os.path.join("uploads/receipts", os.path.basename(receipt_url))
+        
+        if not os.path.exists(receipt_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Receipt file not found in storage"
+            )
             
-            logger.debug("Uploaded receipt image added to AI request")
+        # Convert stored receipt to base64
+        with open(receipt_path, "rb") as img_file:
+            base64_stored = base64.b64encode(img_file.read()).decode('utf-8')
+            
+        # Add stored receipt to content
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_stored}"
+            }
+        })
+            
+        logger.debug("Receipt image added to AI request for financial verification")
         
         # Add content to messages
         messages.append({
@@ -588,7 +600,7 @@ User query: {query}
             "content": content
         })
         
-        logger.debug(f"Sending AI request for transaction verification")
+        logger.debug(f"Sending AI request for expense financial accuracy verification")
         
         # Call AI model through OpenRouter
         completion = ai_client.chat.completions.create(
@@ -603,25 +615,32 @@ User query: {query}
         ai_response = completion.choices[0].message.content
         logger.debug(f"Received AI response: {ai_response[:100]}...")
         
+        # Extract a simple verification result if possible (look for true/false indicators in the response)
+        verification_result = "NEEDS_REVIEW"  # Default
+        if "match" in ai_response.lower() and "confirm" in ai_response.lower():
+            verification_result = "MATCH"
+        elif "discrepancy" in ai_response.lower() or "does not match" in ai_response.lower() or "doesn't match" in ai_response.lower():
+            verification_result = "DISCREPANCY"
+        
         # Return formatted response
         return {
             "expense_id": expense_id,
-            "amount": expense.get("amount"),
+            "recorded_amount": expense.get("amount"),
             "description": expense.get("description"),
-            "query": query,
-            "verification_analysis": ai_response,
-            "timestamp": datetime.utcnow().isoformat(),
-            "stored_receipt_available": receipt_url is not None,
-            "user_receipt_provided": receipt_image is not None
+            "date": expense.get("date"),
+            "verification_type": verification_type,
+            "analysis": ai_response,
+            "verification_result": verification_result,
+            "timestamp": datetime.utcnow().isoformat()
         }
         
     except HTTPException as he:
         # Re-raise HTTP exceptions
         raise he
     except Exception as e:
-        logger.error(f"Error verifying transaction authenticity: {str(e)}")
+        logger.error(f"Error verifying expense financial accuracy: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error verifying transaction: {str(e)}"
+            detail=f"Error verifying expense: {str(e)}"
         ) 
